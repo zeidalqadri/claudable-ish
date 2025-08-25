@@ -16,7 +16,14 @@
     "setup": "npm install",
     "clean": "node scripts/clean.js",
     "db:reset": "node scripts/reset-db.js",
-    "db:backup": "node scripts/backup-db.js"
+    "db:backup": "node scripts/backup-db.js",
+    "manage": "./claudable.sh",
+    "start": "./claudable.sh start",
+    "stop": "./claudable.sh stop",
+    "restart": "./claudable.sh restart",
+    "status": "./claudable.sh status",
+    "logs": "./claudable.sh logs",
+    "health": "./claudable.sh health"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

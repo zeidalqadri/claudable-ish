@@ -37,6 +37,16 @@ class Session(Base):
     total_cost_usd: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     
+    # Context Management
+    context_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Model's token limit
+    context_percentage: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)  # Usage percentage
+    context_status: Mapped[str] = mapped_column(String(16), default="safe")  # safe, warning, critical
+    
+    # Session Continuity
+    previous_session_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True)
+    session_summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # Summary for context transfer
+    is_continuation: Mapped[bool] = mapped_column(default=False)  # Is this a continuation session
+    
     # Timestamps
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -46,3 +56,6 @@ class Session(Base):
     messages = relationship("Message", back_populates="session")
     tools_usage = relationship("ToolUsage", back_populates="session", cascade="all, delete-orphan")
     user_requests = relationship("UserRequest", back_populates="session")
+    
+    # Session Continuity Relationships
+    previous_session = relationship("Session", remote_side=[id], backref="continuation_sessions")

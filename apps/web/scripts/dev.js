@@ -9,33 +9,37 @@ let browserOpened = false;
 const shouldOpenBrowser = process.env.BROWSER !== 'false' && process.env.BROWSER !== 'none';
 
 // Function to open browser after a delay
-const openBrowserOnce = () => {
+const openBrowserOnce = (port) => {
   if (browserOpened || !shouldOpenBrowser) return;
   browserOpened = true;
 
   // Wait for server to be ready, then open browser
   setTimeout(async () => {
     try {
-      const url = 'http://localhost:3000';
+      const url = `http://localhost:${port}`;
       // Dynamic import for ESM module
       const open = (await import('open')).default;
       await open(url);
       console.log(`\n🚀 Browser opened at ${url}`);
     } catch (error) {
-      console.log(`\n⚠️  Could not open browser automatically. Please visit http://localhost:3000 manually.`);
+      console.log(`\n⚠️  Could not open browser automatically. Please visit http://localhost:${port} manually.`);
       console.log('Error:', error.message);
     }
   }, 4000); // 4 second delay to ensure server is ready
 };
 
+// Get port from command line arguments or default to 3000
+const portArg = process.argv.find(arg => arg.startsWith('--port'));
+const port = portArg ? portArg.split('=')[1] || process.argv[process.argv.indexOf('--port') + 1] : '3000';
+
 // Start Next.js dev server
-const next = spawn('npx', ['next', 'dev', '--turbo'], {
+const next = spawn('npx', ['next', 'dev', '--turbo', '-p', port], {
   stdio: 'inherit',
   shell: true
 });
 
 // Open browser once after server starts
-openBrowserOnce();
+openBrowserOnce(port);
 
 // Handle process termination
 process.on('SIGINT', () => {

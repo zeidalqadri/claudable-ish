@@ -1,9 +1,11 @@
 /**
  * Chat Header Component
- * Displays chat controls and status
+ * Displays chat controls, context usage, and session management
  */
 import React from 'react';
 import { ChatMode } from '@/types/chat';
+import { ContextIndicator, ContextUsage } from './ContextIndicator';
+import { SessionManager, SessionInfo } from './SessionManager';
 
 interface ChatHeaderProps {
   mode: ChatMode;
@@ -11,6 +13,16 @@ interface ChatHeaderProps {
   onClear: () => void;
   isConnected?: boolean;
   sessionStatus?: string;
+  // Context Management Props
+  contextUsage?: ContextUsage;
+  currentSession?: SessionInfo | null;
+  allSessions?: SessionInfo[];
+  canCreateNewSession?: boolean;
+  recommendations?: string[];
+  onSwitchSession?: (sessionId: string) => void;
+  onCreateNewSession?: () => void;
+  onExportSession?: (sessionId: string) => void;
+  contextLoading?: boolean;
 }
 
 export function ChatHeader({ 
@@ -18,11 +30,22 @@ export function ChatHeader({
   onModeChange, 
   onClear, 
   isConnected,
-  sessionStatus 
+  sessionStatus,
+  // Context props
+  contextUsage,
+  currentSession,
+  allSessions = [],
+  canCreateNewSession = false,
+  recommendations = [],
+  onSwitchSession,
+  onCreateNewSession,
+  onExportSession,
+  contextLoading = false
 }: ChatHeaderProps) {
   return (
     <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-2xl">
-      <div className="flex items-center justify-between">
+      {/* Main Header Row */}
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-4">
           {/* Mode Selector */}
           <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
@@ -80,6 +103,36 @@ export function ChatHeader({
                     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
+        </div>
+      </div>
+
+      {/* Context and Session Management Row */}
+      <div className="flex items-center justify-between">
+        <div className="flex-1 min-w-0 pr-4">
+          {/* Context Usage Indicator */}
+          {contextUsage && (
+            <ContextIndicator 
+              usage={contextUsage} 
+              showDetails={true} 
+              compact={false} 
+            />
+          )}
+        </div>
+
+        {/* Session Manager */}
+        <div className="flex-shrink-0">
+          {allSessions.length > 0 && onSwitchSession && onCreateNewSession && (
+            <SessionManager
+              currentSession={currentSession}
+              allSessions={allSessions}
+              canCreateNew={canCreateNewSession}
+              recommendations={recommendations}
+              onSwitchSession={onSwitchSession}
+              onCreateNewSession={onCreateNewSession}
+              onExportSession={onExportSession}
+              isLoading={contextLoading}
+            />
+          )}
         </div>
       </div>
     </div>

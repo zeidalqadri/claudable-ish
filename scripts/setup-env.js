@@ -45,9 +45,26 @@ async function setupEnvironment() {
       console.log('  Created data directory');
     }
     
-    // Find available ports
-    const apiPort = await findAvailablePort(DEFAULT_API_PORT);
-    const webPort = await findAvailablePort(DEFAULT_WEB_PORT);
+    // Check if .env file exists and read existing ports
+    let apiPort = DEFAULT_API_PORT;
+    let webPort = DEFAULT_WEB_PORT;
+    
+    if (fs.existsSync(envFile)) {
+      const existingEnv = fs.readFileSync(envFile, 'utf8');
+      const apiMatch = existingEnv.match(/API_PORT=(\d+)/);
+      const webMatch = existingEnv.match(/WEB_PORT=(\d+)/);
+      
+      if (apiMatch) apiPort = parseInt(apiMatch[1]);
+      if (webMatch) webPort = parseInt(webMatch[1]);
+    }
+    
+    // Only find new ports if current ones are not available
+    if (!(await isPortAvailable(apiPort))) {
+      apiPort = await findAvailablePort(DEFAULT_API_PORT);
+    }
+    if (!(await isPortAvailable(webPort))) {
+      webPort = await findAvailablePort(DEFAULT_WEB_PORT);
+    }
     
     if (apiPort !== DEFAULT_API_PORT) {
       console.log(`  API port ${DEFAULT_API_PORT} is busy, using ${apiPort}`);

@@ -2,14 +2,16 @@
  * Chat Interface Component
  * Main chat container component
  */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { ChatMode, ImageAttachment } from '@/types/chat';
 import { useChat } from '@/hooks/useChat';
 import { useCLI } from '@/hooks/useCLI';
+import { useContext } from '@/hooks/useContext';
 import { ChatHeader } from './ChatHeader';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { CLISelector } from './CLISelector';
+import { ContextWarning, useContextWarnings } from './ContextWarning';
 
 interface ChatInterfaceProps {
   projectId: string;
@@ -36,6 +38,19 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
     updatePreference
   } = useCLI({ projectId });
 
+  // Context Management
+  const {
+    currentUsage,
+    currentSession: contextCurrentSession,
+    allSessions,
+    canCreateNew,
+    recommendations,
+    isLoading: contextLoading,
+    switchSession,
+    createNewSession,
+    exportSession
+  } = useContext({ projectId });
+
   const handleSendMessage = useCallback(async (content: string, images?: ImageAttachment[]) => {
     if (mode === 'chat') {
       await sendMessage(content);
@@ -53,6 +68,20 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
     setShowCLISelector(false);
   }, [updatePreference]);
 
+  // Context warnings
+  const {
+    shouldShowWarning,
+    dismissWarning,
+    showNotification
+  } = useContextWarnings(currentUsage, recommendations);
+
+  // Show browser notification for critical warnings
+  useEffect(() => {
+    if (currentUsage?.status === 'critical' && shouldShowWarning) {
+      showNotification();
+    }
+  }, [currentUsage?.status, shouldShowWarning, showNotification]);
+
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 rounded-2xl shadow-lg">
       {/* Header */}
@@ -62,6 +91,16 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
         onClear={clearMessages}
         isConnected={isConnected}
         sessionStatus={currentSession?.status}
+        // Context Management Props
+        contextUsage={currentUsage}
+        currentSession={contextCurrentSession}
+        allSessions={allSessions}
+        canCreateNewSession={canCreateNew}
+        recommendations={recommendations}
+        onSwitchSession={switchSession}
+        onCreateNewSession={createNewSession}
+        onExportSession={exportSession}
+        contextLoading={contextLoading}
       />
 
       {/* CLI Selector (Act mode only) */}
@@ -90,6 +129,16 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
             )}
           </div>
         </div>
+      )}
+
+      {/* Context Warning */}
+      {shouldShowWarning && (
+        <ContextWarning
+          usage={currentUsage}
+          recommendations={recommendations}
+          onCreateNewSession={createNewSession}
+          onDismiss={dismissWarning}
+        />
       )}
 
       {/* Messages */}

@@ -7,6 +7,7 @@ from app.api.commits import router as commits_router
 from app.api.env import router as env_router
 from app.api.assets import router as assets_router
 from app.api.chat import router as chat_router
+from app.api.context import router as context_router
 from app.api.tokens import router as tokens_router
 from app.api.settings import router as settings_router
 from app.api.project_services import router as project_services_router
@@ -59,6 +60,7 @@ app.include_router(commits_router)
 app.include_router(env_router)
 app.include_router(assets_router)
 app.include_router(chat_router, prefix="/api/chat")  # Unified chat API (includes WebSocket and ACT)
+app.include_router(context_router, prefix="/api/context")  # Context management API
 app.include_router(tokens_router)  # Service tokens API
 app.include_router(settings_router)  # Settings API
 app.include_router(project_services_router)  # Project services API
