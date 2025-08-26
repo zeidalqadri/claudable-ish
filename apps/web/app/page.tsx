@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import CreateProjectModal from '@/components/CreateProjectModal';
 import DeleteProjectModal from '@/components/DeleteProjectModal';
 import GlobalSettings from '@/components/GlobalSettings';
+import GitHubCloneModal from '@/components/GitHubCloneModal';
 import Image from 'next/image';
 import { Image as ImageIcon } from 'lucide-react';
 
@@ -29,11 +30,17 @@ type Project = {
     supabase?: { connected: boolean; status: string };
     vercel?: { connected: boolean; status: string };
   };
+  // Repository information
+  repo_url?: string | null;
+  repo_name?: string | null;
+  repo_default_branch?: string | null;
+  repo_cloned_at?: string | null;
 };
 
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [showCreate, setShowCreate] = useState(false);
+  const [showClone, setShowClone] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [globalSettingsTab, setGlobalSettingsTab] = useState<'general' | 'ai-assistant'>('ai-assistant');
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -491,6 +498,53 @@ export default function HomePage() {
     setShowAssistantDropdown(false);
   };
 
+  const [tempProjectId, setTempProjectId] = useState<string>('');
+
+  const handleCloneClick = async () => {
+    // Create a temporary project for cloning
+    const tempId = `clone-${Date.now()}`;
+    
+    try {
+      const response = await fetchAPI(`${API_BASE}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: tempId,
+          name: 'Cloning Repository...',
+          initial_prompt: null,
+          preferred_cli: 'claude',
+          selected_model: 'claude-sonnet-4'
+        })
+      });
+
+      if (response.ok) {
+        setTempProjectId(tempId);
+        setShowClone(true);
+      } else {
+        setToast({ message: 'Failed to prepare for cloning', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Failed to create temp project:', error);
+      setToast({ message: 'Failed to prepare for cloning', type: 'error' });
+    }
+  };
+
+  const handleCloneSuccess = (repoName: string) => {
+    setToast({ message: `Repository ${repoName} cloned successfully!`, type: 'success' });
+    setTempProjectId('');
+    fetchProjects(); // Refresh the projects list
+  };
+
+  const handleCloneCancel = () => {
+    // Clean up temp project if it exists
+    if (tempProjectId) {
+      fetchAPI(`${API_BASE}/api/projects/${tempProjectId}`, { method: 'DELETE' })
+        .catch(err => console.error('Failed to cleanup temp project:', err));
+      setTempProjectId('');
+    }
+    setShowClone(false);
+  };
+
   const assistantOptions = [
     { id: 'claude', name: 'Claude Code', icon: '/claude.png' },
     { id: 'cursor', name: 'Cursor Agent', icon: '/cursor.png' }
@@ -559,6 +613,19 @@ export default function HomePage() {
             </div>
           </div>
           
+          {/* Action buttons */}
+          <div className="px-3 pb-3 border-b border-gray-200 dark:border-white/10">
+            <button
+              onClick={handleCloneClick}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Clone Repository
+            </button>
+          </div>
+          
           <div className="flex-1 overflow-y-auto p-2">
             <div className="space-y-1">
               {projects.length === 0 ? (
@@ -614,12 +681,31 @@ export default function HomePage() {
                           className="flex-1 cursor-pointer min-w-0"
                           onClick={() => router.push(`/${project.id}/chat`)}
                         >
-                          <h3 className="text-gray-900 dark:text-white text-sm group-hover:text-orange-500 dark:group-hover:text-orange-300 transition-colors truncate">
-                            {project.name.length > 28 
-                              ? `${project.name.substring(0, 28)}...` 
-                              : project.name
-                            }
-                          </h3>
+                          {project.repo_name ? (
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <svg className="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M12 0C5.373 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.6.111.793-.261.793-.577 0-.285-.01-1.04-.016-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.744.083-.729.083-.729 1.205.085 1.838 1.236 1.838 1.236 1.07 1.835 2.807 1.305 3.492.997.108-.776.42-1.305.763-1.605-2.665-.305-5.467-1.332-5.467-5.93 0-1.31.469-2.381 1.235-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.233 1.911 1.233 3.221 0 4.61-2.807 5.621-5.479 5.921.43.372.814 1.102.814 2.222 0 1.606-.015 2.896-.015 3.286 0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                                </svg>
+                                <span className="text-blue-600 dark:text-blue-400 text-xs font-mono">
+                                  {project.repo_name}
+                                </span>
+                              </div>
+                              <h3 className="text-gray-900 dark:text-white text-sm group-hover:text-orange-500 dark:group-hover:text-orange-300 transition-colors truncate mt-1">
+                                {project.name.length > 28 
+                                  ? `${project.name.substring(0, 28)}...` 
+                                  : project.name
+                                }
+                              </h3>
+                            </div>
+                          ) : (
+                            <h3 className="text-gray-900 dark:text-white text-sm group-hover:text-orange-500 dark:group-hover:text-orange-300 transition-colors truncate">
+                              {project.name.length > 28 
+                                ? `${project.name.substring(0, 28)}...` 
+                                : project.name
+                              }
+                            </h3>
+                          )}
                           <div className="text-gray-500 text-xs mt-1">
                             {formatTime(project.last_message_at || project.created_at)}
                           </div>
@@ -1060,6 +1146,14 @@ export default function HomePage() {
           </motion.div>
         </div>
       )}
+
+      {/* GitHub Clone Modal */}
+      <GitHubCloneModal
+        isOpen={showClone}
+        onClose={handleCloneCancel}
+        projectId={tempProjectId}
+        onSuccess={handleCloneSuccess}
+      />
       </div>
     </div>
   );

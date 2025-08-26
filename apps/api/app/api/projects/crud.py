@@ -58,6 +58,12 @@ class Project(BaseModel):
     initial_prompt: Optional[str] = None
     preferred_cli: Optional[str] = None
     selected_model: Optional[str] = None
+    
+    # Repository information
+    repo_url: Optional[str] = None
+    repo_name: Optional[str] = None
+    repo_default_branch: Optional[str] = None
+    repo_cloned_at: Optional[datetime] = None
 
 router = APIRouter()
 
@@ -272,7 +278,11 @@ async def list_projects(db: Session = Depends(get_db)) -> List[Project]:
             ai_generated=ai_info.get('ai_generated', False),
             initial_prompt=project.initial_prompt,
             preferred_cli=project.preferred_cli,
-            selected_model=project.selected_model
+            selected_model=project.selected_model,
+            repo_url=project.repo_url,
+            repo_name=project.repo_name,
+            repo_default_branch=project.repo_default_branch,
+            repo_cloned_at=project.repo_cloned_at
         ))
     
     return result

@@ -14,6 +14,13 @@ class Project(Base):
     preview_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     preview_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     repo_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    
+    # Repository information (for GitHub integration)
+    repo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)  # GitHub repo URL
+    repo_name: Mapped[str | None] = mapped_column(String(128), nullable=True)  # Repository name (owner/repo)
+    repo_default_branch: Mapped[str | None] = mapped_column(String(64), nullable=True)  # main, master, etc.
+    repo_cloned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # When repo was cloned
+    
     initial_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     template_type: Mapped[str | None] = mapped_column(String(64), nullable=True)  # nextjs, react, vue, etc.
     
@@ -42,3 +49,4 @@ class Project(Base):
     env_vars = relationship("EnvVar", back_populates="project", cascade="all, delete-orphan")
     service_connections = relationship("ProjectServiceConnection", back_populates="project", cascade="all, delete-orphan")
     user_requests = relationship("UserRequest", back_populates="project", cascade="all, delete-orphan")
+    worktree_sessions = relationship("WorktreeSession", back_populates="project", cascade="all, delete-orphan")
