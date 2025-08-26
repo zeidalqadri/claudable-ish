@@ -30,6 +30,20 @@ class TokenResponse(BaseModel):
     created_at: datetime
     last_used: Optional[datetime] = None
 
+def validate_github_token(token: str) -> tuple[bool, str]:
+    """Validate GitHub token format and clean it"""
+    import re
+    
+    # Clean the token - remove any extra information after @
+    clean_token = token.split('@')[0].strip()
+    
+    # GitHub token patterns
+    classic_pattern = r'^[a-f0-9]{40}$'  # Classic tokens: 40 hex chars
+    new_pattern = r'^ghp_[a-zA-Z0-9]{36}$'  # New tokens: ghp_ prefix + 36 chars
+    
+    is_valid = bool(re.match(classic_pattern, clean_token) or re.match(new_pattern, clean_token))
+    return is_valid, clean_token
+
 @router.post("/", response_model=TokenResponse)
 async def create_token(body: TokenCreate, db: Session = Depends(get_db)):
     """Save a new service token"""
@@ -38,6 +52,16 @@ async def create_token(body: TokenCreate, db: Session = Depends(get_db)):
     
     if not body.token.strip():
         raise HTTPException(status_code=400, detail="Token cannot be empty")
+    
+    # Validate GitHub token format
+    if body.provider == "github":
+        is_valid, clean_token = validate_github_token(body.token)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid GitHub token format. Expected format: ghp_xxxx... or 40 hex characters"
+            )
+        body.token = clean_token
     
     try:
         service_token = save_service_token(

@@ -844,6 +844,116 @@ async def search_repositories(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/github/debug/token-status")
+async def debug_github_token_status(db: Session = Depends(get_db)):
+    """Debug endpoint to check GitHub token status"""
+    try:
+        from app.models.tokens import ServiceToken
+        
+        token_record = db.query(ServiceToken).filter_by(provider="github").first()
+        if not token_record:
+            return {
+                "token_exists": False,
+                "message": "No GitHub token found. Please add your token in Settings."
+            }
+        
+        # Test token with GitHub API
+        github_service = GitHubService(token_record.token)
+        user_info = await github_service.check_token_validity()
+        
+        return {
+            "token_exists": True,
+            "token_length": len(token_record.token),
+            "token_valid": user_info.get("valid", False),
+            "username": user_info.get("username") if user_info.get("valid") else None,
+            "created_at": token_record.created_at.isoformat(),
+            "last_used": token_record.last_used.isoformat() if token_record.last_used else None,
+            "message": "Token is valid" if user_info.get("valid") else "Token is invalid or expired"
+        }
+    except Exception as e:
+        logger.error(f"Error checking GitHub token status: {e}")
+        return {
+            "error": str(e)
+        }
+
+@router.get("/github/user/repos")
+async def get_user_repositories(
+    per_page: int = 30,
+    page: int = 1,
+    db: Session = Depends(get_db)
+):
+    """Get authenticated user's repositories"""
+    
+    # Get GitHub token with enhanced error handling
+    try:
+        from app.models.tokens import ServiceToken
+        
+        # Check if token exists in database
+        token_record = db.query(ServiceToken).filter_by(provider="github").first()
+        if not token_record:
+            logger.error("No GitHub token found in database")
+            raise HTTPException(
+                status_code=401, 
+                detail="GitHub token not configured. Please add your GitHub token in Settings."
+            )
+        
+        github_token = token_record.token
+        if not github_token or not github_token.strip():
+            logger.error("GitHub token exists but is empty")
+            raise HTTPException(
+                status_code=401,
+                detail="GitHub token is invalid. Please reconfigure your token in Settings."
+            )
+            
+        logger.info(f"GitHub token retrieved successfully, length: {len(github_token)}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving GitHub token: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve GitHub token: {str(e)}"
+        )
+    
+    try:
+        github_service = GitHubService(github_token)
+        result = await github_service.get_user_repositories(per_page, page)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to fetch user repositories"))
+        
+        # Format repositories for frontend
+        repositories = []
+        for repo in result["repositories"]:
+            repositories.append({
+                "name": repo["name"],
+                "full_name": repo["full_name"],
+                "description": repo.get("description", ""),
+                "html_url": repo["html_url"],
+                "clone_url": repo["clone_url"],
+                "ssh_url": repo["ssh_url"],
+                "stars": repo["stargazers_count"],
+                "forks": repo["forks_count"],
+                "language": repo.get("language"),
+                "updated_at": repo["updated_at"],
+                "owner": {
+                    "login": repo["owner"]["login"],
+                    "avatar_url": repo["owner"]["avatar_url"]
+                },
+                "private": repo["private"],
+                "default_branch": repo.get("default_branch", "main")
+            })
+        
+        return {
+            "repositories": repositories
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching user repositories: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/projects/{project_id}/github/clone")
 async def clone_repository(
     project_id: str,
