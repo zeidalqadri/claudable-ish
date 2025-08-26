@@ -139,7 +139,8 @@ class BaseCLI(ABC):
         log_callback: Optional[Callable] = None,
         images: Optional[List[Dict[str, Any]]] = None,
         model: Optional[str] = None,
-        is_initial_prompt: bool = False
+        is_initial_prompt: bool = False,
+        execution_mode: str = "act"
     ) -> AsyncGenerator[Message, None]:
         """Execute instruction and yield messages in real-time"""
         pass
@@ -325,6 +326,79 @@ class BaseCLI(ABC):
             return "Fetching web content"
         else:
             return f"Using {tool_name}"
+
+    def _format_tool_input_for_display(self, tool_name: str, tool_input: dict) -> str:
+        """Format tool input parameters for detailed disclosure"""
+        normalized_name = self._normalize_tool_name(tool_name)
+        
+        if normalized_name == "Read":
+            file_path = tool_input.get('file_path', '') or tool_input.get('path', '') or tool_input.get('file', '')
+            limit = tool_input.get('limit')
+            offset = tool_input.get('offset')
+            details = f"File: {file_path}"
+            if limit or offset:
+                details += f"\nLimit: {limit or 'all'}, Offset: {offset or '0'}"
+            return details
+        
+        elif normalized_name == "Write":
+            file_path = tool_input.get('file_path', '') or tool_input.get('path', '') or tool_input.get('file', '')
+            content = tool_input.get('content', '') or tool_input.get('text', '')
+            return f"File: {file_path}\nContent length: {len(content)} characters"
+        
+        elif normalized_name == "Edit":
+            file_path = tool_input.get('file_path', '') or tool_input.get('path', '') or tool_input.get('file', '')
+            old_text = tool_input.get('old_str', '') or tool_input.get('old_string', '') or tool_input.get('search', '')
+            new_text = tool_input.get('new_str', '') or tool_input.get('new_string', '') or tool_input.get('replace', '')
+            return f"File: {file_path}\nReplace: {len(old_text)} chars → {len(new_text)} chars"
+        
+        elif normalized_name == "Bash":
+            command = tool_input.get('command', '') or tool_input.get('cmd', '') or tool_input.get('script', '')
+            description = tool_input.get('description', '')
+            return f"Command: {command}\nDescription: {description}" if description else f"Command: {command}"
+        
+        elif normalized_name == "Glob":
+            pattern = tool_input.get('pattern', '') or tool_input.get('name', '') or tool_input.get('globPattern', '')
+            path = tool_input.get('path', '') or tool_input.get('directory', 'current directory')
+            return f"Pattern: {pattern}\nPath: {path}"
+        
+        elif normalized_name == "Grep":
+            pattern = tool_input.get('pattern', '') or tool_input.get('query', '') or tool_input.get('search', '')
+            path = tool_input.get('path', '') or tool_input.get('file', 'current directory')
+            glob = tool_input.get('glob', '') or tool_input.get('files', '')
+            details = f"Pattern: {pattern}\nPath: {path}"
+            if glob:
+                details += f"\nFiles: {glob}"
+            return details
+        
+        elif normalized_name == "LS":
+            path = tool_input.get('path', '') or tool_input.get('directory', 'current directory')
+            return f"Directory: {path}"
+        
+        else:
+            # Generic formatting for other tools
+            return "\n".join([f"{k}: {v}" for k, v in tool_input.items() if v is not None])
+
+    def _normalize_tool_name(self, tool_name: str) -> str:
+        """Normalize tool names from different CLIs to standard names"""
+        name_mappings = {
+            "str_replace_editor": "Edit",
+            "create_file": "Write", 
+            "read_file": "Read",
+            "find_files": "Glob",
+            "execute_bash": "Bash",
+            "execute_command": "Bash", 
+            "run_command": "Bash",
+            "search_files": "Grep",
+            "search_in_file": "Grep",
+            "recall_memory": "Read",
+            "save_memory": "SaveMemory",
+            "list_directory": "LS",
+            "list_dir": "LS",
+            "file_search": "Grep",
+            "list_files": "LS",
+            "directory_listing": "LS"
+        }
+        return name_mappings.get(tool_name.lower(), tool_name)
 
     def _create_tool_summary(self, tool_name: str, tool_input: Dict[str, Any]) -> str:
         """Create a visual markdown summary for tool usage"""
@@ -525,7 +599,8 @@ class ClaudeCodeCLI(BaseCLI):
         log_callback: Optional[Callable] = None,
         images: Optional[List[Dict[str, Any]]] = None,
         model: Optional[str] = None,
-        is_initial_prompt: bool = False
+        is_initial_prompt: bool = False,
+        execution_mode: str = "act"
     ) -> AsyncGenerator[Message, None]:
         """Execute instruction using Claude Code Python SDK"""
         from app.core.terminal_ui import ui
@@ -538,11 +613,11 @@ class ClaudeCodeCLI(BaseCLI):
         if log_callback:
             await log_callback("Starting execution...")
         
-        # Load system prompt
+        # Load system prompt based on execution mode
         try:
             from app.services.claude_act import get_system_prompt
-            system_prompt = get_system_prompt()
-            ui.debug(f"System prompt loaded: {len(system_prompt)} chars", "Claude SDK")
+            system_prompt = get_system_prompt(execution_mode)
+            ui.debug(f"System prompt loaded for {execution_mode} mode: {len(system_prompt)} chars", "Claude SDK")
         except Exception as e:
             ui.error(f"Failed to load system prompt: {e}", "Claude SDK")
             system_prompt = "You are Claude Code, an AI coding assistant specialized in building modern web applications."
@@ -575,46 +650,52 @@ node_modules/
             instruction = instruction + project_structure_info
             ui.info(f"Added project structure info to initial prompt", "Claude SDK")
         
-        # Configure tools based on initial prompt status
-        if is_initial_prompt:
-            # For initial prompts: use disallowed_tools to explicitly block TodoWrite
-            allowed_tools = [
-                "Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep", "LS",
-                "WebFetch", "WebSearch"
-            ]
-            disallowed_tools = ["TodoWrite"]
+        # Configure tools based on execution mode
+        ui.info(f"Execution mode: {execution_mode}", "Claude SDK")
+        
+        if execution_mode == "chat":
+            # Chat mode: No file modification tools, only read-only
+            allowed_tools = ["Read", "Glob", "Grep", "LS", "WebFetch", "WebSearch"]
+            disallowed_tools = ["Write", "Edit", "MultiEdit", "Bash", "TodoWrite"]
+            ui.info("Chat mode: Read-only tools enabled", "Claude SDK")
             
-            ui.info(f"TodoWrite tool EXCLUDED via disallowed_tools (is_initial_prompt: {is_initial_prompt})", "Claude SDK")
-            ui.debug(f"Allowed tools: {allowed_tools}", "Claude SDK")
-            ui.debug(f"Disallowed tools: {disallowed_tools}", "Claude SDK")
+        elif execution_mode == "plan":
+            # Plan mode: Read-only tools plus TodoWrite for planning
+            allowed_tools = ["Read", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "TodoWrite"]
+            disallowed_tools = ["Write", "Edit", "MultiEdit", "Bash"]
+            ui.info("Plan mode: Read-only tools + TodoWrite enabled", "Claude SDK")
             
-            # Configure Claude Code options with disallowed_tools
-            options = ClaudeCodeOptions(
-                system_prompt=system_prompt,
-                allowed_tools=allowed_tools,
-                disallowed_tools=disallowed_tools,
-                permission_mode="bypassPermissions",
-                model=cli_model,
-                continue_conversation=True
-            )
-        else:
-            # For non-initial prompts: include TodoWrite in allowed tools
-            allowed_tools = [
-                "Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep", "LS",
-                "WebFetch", "WebSearch", "TodoWrite"
-            ]
-            
-            ui.info(f"TodoWrite tool INCLUDED (is_initial_prompt: {is_initial_prompt})", "Claude SDK")
-            ui.debug(f"Allowed tools: {allowed_tools}", "Claude SDK")
-            
-            # Configure Claude Code options without disallowed_tools
-            options = ClaudeCodeOptions(
-                system_prompt=system_prompt,
-                allowed_tools=allowed_tools,
-                permission_mode="bypassPermissions",
-                model=cli_model,
-                continue_conversation=True
-            )
+        else:  # execution_mode == "act"
+            # Act mode: Full tool access
+            if is_initial_prompt:
+                # For initial prompts: use disallowed_tools to explicitly block TodoWrite
+                allowed_tools = [
+                    "Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep", "LS",
+                    "WebFetch", "WebSearch"
+                ]
+                disallowed_tools = ["TodoWrite"]
+                ui.info(f"Act mode (initial): TodoWrite excluded", "Claude SDK")
+            else:
+                # For non-initial prompts: include TodoWrite in allowed tools
+                allowed_tools = [
+                    "Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep", "LS",
+                    "WebFetch", "WebSearch", "TodoWrite"
+                ]
+                disallowed_tools = []
+                ui.info(f"Act mode: All tools enabled", "Claude SDK")
+        
+        ui.debug(f"Allowed tools: {allowed_tools}", "Claude SDK")
+        ui.debug(f"Disallowed tools: {disallowed_tools}", "Claude SDK")
+        
+        # Configure Claude Code options
+        options = ClaudeCodeOptions(
+            system_prompt=system_prompt,
+            allowed_tools=allowed_tools,
+            disallowed_tools=disallowed_tools if disallowed_tools else None,
+            permission_mode="bypassPermissions",
+            model=cli_model,
+            continue_conversation=True
+        )
         
         ui.info(f"Using model: {cli_model}", "Claude SDK")
         ui.debug(f"Project path: {project_path}", "Claude SDK")
@@ -706,7 +787,8 @@ node_modules/
                                         tool_input = block.input
                                         tool_id = block.id
                                         summary = self._create_tool_summary(tool_name, tool_input)
-                                            
+                                        formatted_input = self._format_tool_input_for_display(tool_name, tool_input)
+                                        
                                         # Yield tool use message immediately
                                         tool_message = Message(
                                             id=str(uuid.uuid4()),
@@ -719,7 +801,10 @@ node_modules/
                                                 "mode": "SDK",
                                                 "tool_name": tool_name,
                                                 "tool_input": tool_input,
-                                                "tool_id": tool_id
+                                                "tool_id": tool_id,
+                                                "formatted_input": formatted_input,
+                                                "start_timestamp": datetime.utcnow().isoformat(),
+                                                "is_error": False
                                             },
                                             session_id=session_id,
                                             created_at=datetime.utcnow()
@@ -1055,7 +1140,8 @@ class CursorAgentCLI(BaseCLI):
         log_callback: Optional[Callable] = None,
         images: Optional[List[Dict[str, Any]]] = None,
         model: Optional[str] = None,
-        is_initial_prompt: bool = False
+        is_initial_prompt: bool = False,
+        execution_mode: str = "act"
     ) -> AsyncGenerator[Message, None]:
         """Execute Cursor Agent CLI with stream-json format and session continuity"""
         # Ensure AGENT.md exists for system prompt
@@ -1336,8 +1422,10 @@ class UnifiedCLIManager:
         cli_type: CLIType,
         fallback_enabled: bool = True,  # Kept for backward compatibility but not used
         images: Optional[List[Dict[str, Any]]] = None,
+        documents: Optional[List[Dict[str, Any]]] = None,
         model: Optional[str] = None,
-        is_initial_prompt: bool = False
+        is_initial_prompt: bool = False,
+        execution_mode: str = "act"  # "chat", "plan", or "act"
     ) -> Dict[str, Any]:
         """Execute instruction with specified CLI"""
         
@@ -1350,7 +1438,7 @@ class UnifiedCLIManager:
             if status.get("available") and status.get("configured"):
                 try:
                     return await self._execute_with_cli(
-                        cli, instruction, images, model, is_initial_prompt
+                        cli, instruction, images, documents, model, is_initial_prompt, execution_mode
                     )
                 except Exception as e:
                     ui.error(f"CLI {cli_type.value} failed: {e}", "CLI")
@@ -1377,14 +1465,31 @@ class UnifiedCLIManager:
         cli,
         instruction: str,
         images: Optional[List[Dict[str, Any]]],
+        documents: Optional[List[Dict[str, Any]]],
         model: Optional[str] = None,
-        is_initial_prompt: bool = False
+        is_initial_prompt: bool = False,
+        execution_mode: str = "act"
     ) -> Dict[str, Any]:
         """Execute instruction with a specific CLI"""
         
         ui.info(f"Starting {cli.cli_type.value} execution", "CLI")
         if model:
             ui.debug(f"Using model: {model}", "CLI")
+        
+        # Prepare instruction with document context
+        enhanced_instruction = instruction
+        if documents and len(documents) > 0:
+            document_contexts = []
+            for doc in documents:
+                doc_name = doc.get('name', 'Unknown')
+                doc_content = doc.get('content', '')
+                if doc_content.strip():
+                    document_contexts.append(f"=== Document: {doc_name} ===\n{doc_content}")
+            
+            if document_contexts:
+                document_section = "\n\n".join(document_contexts)
+                enhanced_instruction = f"[DOCUMENT CONTEXT]\n{document_section}\n\n[USER INSTRUCTION]\n{instruction}"
+                ui.info(f"Added context from {len(documents)} document(s)", "CLI")
         
         messages_collected = []
         has_changes = False
@@ -1399,13 +1504,14 @@ class UnifiedCLIManager:
         message_count = 0
         
         async for message in cli.execute_with_streaming(
-            instruction=instruction,
+            instruction=enhanced_instruction,
             project_path=self.project_path,
             session_id=self.session_id,
             log_callback=log_callback,
             images=images,
             model=model,
-            is_initial_prompt=is_initial_prompt
+            is_initial_prompt=is_initial_prompt,
+            execution_mode=execution_mode
         ):
             message_count += 1
             

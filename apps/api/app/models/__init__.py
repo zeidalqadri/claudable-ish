@@ -8,6 +8,8 @@ from app.models.env_vars import EnvVar
 from app.models.tokens import ServiceToken
 from app.models.project_services import ProjectServiceConnection
 from app.models.user_requests import UserRequest
+from app.models.worktree_sessions import WorktreeSession
+# from app.models.file_metadata import FileMetadata  # Removed - using simple context passing instead
 
 
 __all__ = [
@@ -20,4 +22,6 @@ __all__ = [
     "ServiceToken",
     "ProjectServiceConnection",
     "UserRequest",
+    "WorktreeSession",
+    # "FileMetadata",  # Removed - using simple context passing instead
 ]

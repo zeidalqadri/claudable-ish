@@ -31,13 +31,21 @@ class ImageAttachment(BaseModel):
     mime_type: str = "image/jpeg"
 
 
+class DocumentAttachment(BaseModel):
+    name: str
+    content: str
+    mime_type: str
+
+
 class ActRequest(BaseModel):
     instruction: str
     conversation_id: str | None = None
     cli_preference: str | None = None
     fallback_enabled: bool = True
     images: List[ImageAttachment] = []
+    documents: List[DocumentAttachment] = []
     is_initial_prompt: bool = False
+    execution_mode: str = "act"  # "chat", "plan", or "act"
 
 
 class ActResponse(BaseModel):
@@ -53,6 +61,7 @@ async def execute_act_instruction(
     session_id: str,
     conversation_id: str,
     images: List[ImageAttachment],
+    documents: List[DocumentAttachment],
     db: Session,
     is_initial_prompt: bool = False
 ):
@@ -95,6 +104,7 @@ async def execute_act_instruction(
             instruction=instruction,
             conversation_id=conversation_id,
             images=images,
+            documents=documents,
             db=db,
             cli_preference=None,  # Will use project's preferred CLI
             fallback_enabled=project_info['fallback_enabled'],
@@ -110,6 +120,7 @@ async def execute_chat_task(
     instruction: str,
     conversation_id: str,
     images: List[ImageAttachment],
+    documents: List[DocumentAttachment],
     db: Session,
     cli_preference: CLIType = None,
     fallback_enabled: bool = True,
@@ -161,8 +172,10 @@ async def execute_chat_task(
             cli_type=cli_preference,
             fallback_enabled=project_fallback_enabled,
             images=images,
+            documents=documents,
             model=project_selected_model,
-            is_initial_prompt=is_initial_prompt
+            is_initial_prompt=is_initial_prompt,
+            execution_mode=execution_mode
         )
         
         
@@ -261,11 +274,13 @@ async def execute_act_task(
     instruction: str,
     conversation_id: str,
     images: List[ImageAttachment],
+    documents: List[DocumentAttachment],
     db: Session,
     cli_preference: CLIType = None,
     fallback_enabled: bool = True,
     is_initial_prompt: bool = False,
-    request_id: str = None
+    request_id: str = None,
+    execution_mode: str = "act"
 ):
     """Background task for executing Act instructions"""
     try:
@@ -323,8 +338,10 @@ async def execute_act_task(
             cli_type=cli_preference,
             fallback_enabled=project_fallback_enabled,
             images=images,
+            documents=documents,
             model=project_selected_model,
-            is_initial_prompt=is_initial_prompt
+            is_initial_prompt=is_initial_prompt,
+            execution_mode=execution_mode
         )
         
         
@@ -527,7 +544,8 @@ async def run_act(
             "type": "act_instruction",
             "cli_preference": cli_preference.value,
             "fallback_enabled": fallback_enabled,
-            "has_images": len(body.images) > 0
+            "has_images": len(body.images) > 0,
+            "has_documents": len(body.documents) > 0
         },
         conversation_id=conversation_id,
         created_at=datetime.utcnow()
@@ -602,11 +620,13 @@ async def run_act(
         body.instruction,
         conversation_id,
         body.images,
+        body.documents,
         db,
         cli_preference,
         fallback_enabled,
         body.is_initial_prompt,
-        request_id
+        request_id,
+        body.execution_mode
     )
     return ActResponse(
         session_id=session.id,
@@ -647,7 +667,8 @@ async def run_chat(
             "type": "chat_instruction",
             "cli_preference": cli_preference.value,
             "fallback_enabled": fallback_enabled,
-            "has_images": len(body.images) > 0
+            "has_images": len(body.images) > 0,
+            "has_documents": len(body.documents) > 0
         },
         conversation_id=conversation_id,
         created_at=datetime.utcnow()
@@ -708,6 +729,7 @@ async def run_chat(
         body.instruction,
         conversation_id,
         body.images,
+        body.documents,
         db,
         cli_preference,
         fallback_enabled,
