@@ -15,6 +15,7 @@ import { CLISelector } from './CLISelector';
 import { ContextWarning, useContextWarnings } from './ContextWarning';
 import { WorktreeManager } from './WorktreeManager';
 import { WorktreeDiffViewer } from './WorktreeDiffViewer';
+import { MemoryPanel } from '../memory/MemoryPanel';
 
 interface ChatInterfaceProps {
   projectId: string;
@@ -25,6 +26,7 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
   const [mode, setMode] = useState<ChatMode>('chat');
   const [showCLISelector, setShowCLISelector] = useState(false);
   const [showDiffViewer, setShowDiffViewer] = useState(false);
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   
   const {
     messages,
@@ -52,6 +54,7 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
     isLoading: contextLoading,
     switchSession,
     createNewSession,
+    resetContext,
     exportSession
   } = useContext({ projectId });
 
@@ -129,17 +132,19 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
   // Auto-create worktree when starting a new act session
   useEffect(() => {
     const createWorktreeForSession = async () => {
-      if (mode === 'act' && currentSession?.id && !currentWorktree) {
+      if (mode === 'act' && currentSession?.id && !currentWorktree && !worktreeLoading) {
         try {
+          console.log('Auto-creating worktree for session:', currentSession.id);
           await createWorktree(currentSession.id);
         } catch (error) {
           console.error('Failed to create worktree for session:', error);
+          // Don't retry automatically to avoid infinite loops
         }
       }
     };
 
     createWorktreeForSession();
-  }, [mode, currentSession?.id, currentWorktree, createWorktree]);
+  }, [mode, currentSession?.id, currentWorktree, createWorktree, worktreeLoading]);
 
   // Context warnings
   const {
@@ -165,7 +170,7 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
         isConnected={isConnected}
         sessionStatus={currentSession?.status}
         // Context Management Props
-        contextUsage={currentUsage}
+        contextUsage={currentUsage || undefined}
         currentSession={contextCurrentSession}
         allSessions={allSessions}
         canCreateNewSession={canCreateNew}
@@ -174,6 +179,8 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
         onCreateNewSession={createNewSession}
         onExportSession={exportSession}
         contextLoading={contextLoading}
+        // Memory Props
+        onToggleMemory={() => setShowMemoryPanel(!showMemoryPanel)}
       />
 
       {/* CLI Selector (Plan and Act modes only) */}
@@ -205,7 +212,7 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
       )}
 
       {/* Worktree Manager (Act mode only) */}
-      {mode === 'act' && (worktrees.length > 0 || isCreating) && (
+      {mode === 'act' && (
         <div className="px-6 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -219,6 +226,15 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
                 onMergeWorktree={handleMergeWorktree}
                 onDiscardWorktree={handleDiscardWorktree}
                 onShowDiff={handleShowDiff}
+                onCreateWorktree={async () => {
+                  if (currentSession?.id) {
+                    try {
+                      await createWorktree(currentSession.id);
+                    } catch (error) {
+                      console.error('Failed to create worktree:', error);
+                    }
+                  }
+                }}
               />
             </div>
             
@@ -237,6 +253,7 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
           usage={currentUsage}
           recommendations={recommendations}
           onCreateNewSession={createNewSession}
+          onResetContext={resetContext}
           onDismiss={dismissWarning}
         />
       )}
@@ -282,6 +299,13 @@ export function ChatInterface({ projectId, conversationId }: ChatInterfaceProps)
           onClose={() => setShowDiffViewer(false)}
         />
       )}
+
+      {/* Memory Panel */}
+      <MemoryPanel
+        projectId={projectId}
+        isOpen={showMemoryPanel}
+        onClose={() => setShowMemoryPanel(false)}
+      />
     </div>
   );
 }

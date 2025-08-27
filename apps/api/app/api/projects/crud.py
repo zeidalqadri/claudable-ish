@@ -101,8 +101,10 @@ async def initialize_project_background(project_id: str, project_name: str, body
                 # Update project with repo path using fresh session
                 project = db_session.query(ProjectModel).filter(ProjectModel.id == project_id).first()
                 if project:
+                    # Ensure the project_path is the actual repo directory for git operations
                     project.repo_path = project_path
                     db_session.commit()
+                    print(f"✅ Set repo_path for project {project_id}: {project_path}")
                 
                 return project_path
             

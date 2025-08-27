@@ -15,6 +15,7 @@ interface WorktreeManagerProps {
   onMergeWorktree: (sessionId: string) => Promise<boolean>;
   onDiscardWorktree: (sessionId: string) => Promise<boolean>;
   onShowDiff: (sessionId: string) => void;
+  onCreateWorktree?: () => Promise<void>;
 }
 
 export function WorktreeManager({
@@ -25,7 +26,8 @@ export function WorktreeManager({
   onSwitchWorktree,
   onMergeWorktree,
   onDiscardWorktree,
-  onShowDiff
+  onShowDiff,
+  onCreateWorktree
 }: WorktreeManagerProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -71,9 +73,20 @@ export function WorktreeManager({
 
   if (worktrees.length === 0) {
     return (
-      <div className="flex items-center gap-2 text-sm text-gray-500">
+      <div className="flex items-center gap-2 text-sm">
         <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'}`} />
-        <span>{isLoading ? 'Creating worktree...' : 'No worktrees'}</span>
+        {isLoading ? (
+          <span className="text-gray-500">Creating worktree...</span>
+        ) : onCreateWorktree ? (
+          <button
+            onClick={onCreateWorktree}
+            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+          >
+            Create worktree
+          </button>
+        ) : (
+          <span className="text-gray-500">No worktrees</span>
+        )}
       </div>
     );
   }

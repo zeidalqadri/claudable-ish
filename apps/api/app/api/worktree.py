@@ -85,8 +85,16 @@ async def create_worktree(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    if not project.repo_path or not os.path.exists(project.repo_path):
-        raise HTTPException(status_code=400, detail="Project repository path not found")
+    if not project.repo_path:
+        raise HTTPException(status_code=400, detail="Project repository path not configured. Please ensure the project is properly initialized.")
+    
+    if not os.path.exists(project.repo_path):
+        raise HTTPException(status_code=400, detail=f"Project repository not found at path: {project.repo_path}")
+    
+    # Check if it's a git repository
+    git_dir = os.path.join(project.repo_path, '.git')
+    if not os.path.exists(git_dir):
+        raise HTTPException(status_code=400, detail="Project directory is not a git repository. Please initialize git first.")
     
     # Check if worktree already exists for this session
     existing_worktree = db.query(WorktreeSession).filter(
